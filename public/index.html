@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบรายงานฐานข้อมูลแปลงฟื้นฟูพื้นที่อนุรักษ์</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { height: 100vh; width: 100%; } /* ให้แผนที่เต็มจอ */
+        .info-box {
+            padding: 6px 8px;
+            font: 14px/16px Arial, Helvetica, sans-serif;
+            background: white;
+            background: rgba(255,255,255,0.8);
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // 1. สร้างแผนที่
+        var map = L.map('map').setView([14.5, 104.5], 6); // ซูมออกกว้างๆ ก่อน
+
+        // 2. เพิ่มพื้นหลัง
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        // 3. ฟังก์ชันดึงข้อมูล
+        async function loadData() {
+            try {
+                console.log("กำลังเริ่มโหลดข้อมูล..."); // เช็คใน Console
+                const response = await fetch('/api/plots');
+                const result = await response.json();
+                console.log("ได้รับข้อมูลแล้ว:", result); // เช็คว่ามีข้อมูลมาไหม
+
+                if (result.data && result.data.length > 0) {
+                    // แปลงข้อมูล
+                    const geoJsonData = {
+                        type: "FeatureCollection",
+                        features: result.data.map(item => ({
+                            type: "Feature",
+                            properties: {
+                                id_plot: item.gid,
+                                name: item.off_nt,
+                                area: item.area_pln,
+                                remark: item.remark
+                            },
+                            geometry: JSON.parse(item.geojson)
+                        }))
+                    };
+
+                    // 4. วาดเส้นและ "สั่งให้ซูมไปหาข้อมูลทันที"
+                    var dataLayer = L.geoJSON(geoJsonData, {
+                        style: function(feature) {
+                            return {color: "blue", weight: 2, fillOpacity: 0.3}; // เพิ่มสีระบายจางๆ
+                        },
+                        onEachFeature: function(feature, layer) {
+                            layer.bindPopup(`
+                                <b>รหัสแปลง:</b> ${feature.properties.id_plot}<br>
+                                <b>หน่วยงาน:</b> ${feature.properties.name}<br>
+                                <b>เนื้อที่:</b> ${feature.properties.area} ไร่
+                            `);
+                        }
+                    }).addTo(map);
+
+                    // ⭐ คาถาสำคัญ: สั่งให้กล้องซูมไปครอบคลุมพื้นที่ข้อมูลทั้งหมด
+                    map.fitBounds(dataLayer.getBounds());
+                    
+                } else {
+                    alert("เชื่อมต่อได้ แต่ไม่พบข้อมูลในฐานข้อมูลครับ");
+                }
+            } catch (error) {
+                console.error("Error loading map:", error);
+                alert("เกิดข้อผิดพลาด! ลองกด F12 ดู Console นะครับ");
+            }
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
